@@ -1,0 +1,250 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme tokens — two flat palettes (dark = ChatGPT-style near-black,
+ * light = ChatGPT-style neutral white), both consumed by tailwind.config.js
+ * as `rgb(var(--x) / <alpha-value>)`. Every value is a space-separated RGB
+ * triplet (not a hex string) specifically so Tailwind's opacity modifiers
+ * (bg-void-900/70, text-neon-400/50, etc. — used all over this codebase)
+ * keep working without every component needing to change.
+ *
+ * Dark is the default (:root) — the app opens in dark mode, matching a
+ * ChatGPT-like default, and src/hooks/useTheme.jsx flips
+ * [data-theme="light"] on <html> for the light variant, persisted to
+ * localStorage with a prefers-color-scheme fallback on first load.
+ */
+:root {
+  color-scheme: dark;
+
+  /* surfaces */
+  --void-900: 33 33 33; /* page background */
+  --void-800: 23 23 23; /* sidebar / navbar */
+  --void-700: 43 43 43; /* card / panel / input surface */
+  --void-600: 55 55 55; /* hover surface */
+  --void-500: 82 82 82; /* strong border tone */
+  --border: 61 61 61;
+  --border-strong: 82 82 82;
+
+  /* text */
+  --text-100: 236 236 236;
+  --text-200: 209 209 214;
+  --text-300: 163 163 163;
+  --text-400: 138 138 138;
+  --text-500: 107 107 107;
+
+  /* accent (brand blue) */
+  --accent-50: 224 240 255;
+  --accent-100: 191 224 255;
+  --accent-200: 143 199 255;
+  --accent-300: 92 172 255;
+  --accent-400: 51 148 255;
+  --accent-500: 0 117 255;
+  --accent-600: 0 96 209;
+  --accent-700: 0 74 163;
+
+  /* secondary / tertiary accents — decorative + chart use */
+  --volt-200: 201 184 255;
+  --volt-300: 167 139 250;
+  --volt-400: 139 109 255;
+  --volt-500: 117 81 255;
+  --volt-600: 88 44 255;
+  --volt-700: 67 24 255;
+  --aqua-300: 122 231 255;
+  --aqua-400: 57 208 255;
+  --aqua-500: 33 212 253;
+
+  /* semantic verdict colors */
+  --danger: 255 91 91;
+  --success: 1 181 116;
+  --warning: 255 181 71;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --void-900: 255 255 255;
+  --void-800: 247 247 248;
+  --void-700: 255 255 255;
+  --void-600: 240 240 241;
+  --void-500: 212 212 216;
+  --border: 229 229 229;
+  --border-strong: 212 212 216;
+
+  --text-100: 13 13 13;
+  --text-200: 46 46 46;
+  --text-300: 90 90 90;
+  --text-400: 115 115 115;
+  --text-500: 163 163 163;
+
+  /* Same accent hue as dark for brand continuity — it already reads fine
+     on white. Only the status colors below get deepened, since red/green/
+     amber at their dark-mode brightness fall short of AA contrast on a
+     white background. */
+  --danger: 220 38 38;
+  --success: 5 150 105;
+  --warning: 180 83 9;
+}
+
+@layer base {
+  html {
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-void-900 text-slate-100 antialiased;
+    /* Flat — no gradient wash. The ChatGPT read comes from generous
+       whitespace and a single flat background, not a decorative layer. */
+    min-height: 100vh;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  input,
+  textarea,
+  select {
+    @apply bg-transparent;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    @apply text-slate-500;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--text-100));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--void-700)) inset;
+    caret-color: rgb(var(--text-100));
+  }
+
+  option {
+    @apply bg-void-700 text-slate-200;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@layer components {
+  /* Card — the single surface primitive. Flat fill + 1px border, no blur,
+     no gradient wash — this one class change is most of the "ChatGPT read"
+     across the whole app, since every card/dropdown/menu uses it. */
+  .panel {
+    @apply rounded-2xl border border-line bg-void-700 shadow-card;
+  }
+
+  /* Hover treatment shared by interactive cards — a border shift only, no
+     translate/glow, to stay flat. */
+  .hover-lift {
+    @apply transition-colors duration-200 ease-out;
+  }
+
+  .hover-lift:hover {
+    @apply border-line-strong;
+  }
+
+  .hud-label {
+    @apply text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-slate-500;
+  }
+
+  /* Flat 1px divider — was a colored gradient line. */
+  .neon-rule {
+    @apply h-px w-full border-0 bg-line;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-void-700 px-4 py-3 text-sm text-slate-100 transition-colors duration-150;
+  }
+
+  .field:hover {
+    @apply border-line-strong;
+  }
+
+  .field:focus {
+    @apply border-neon-500/60 bg-void-700 outline-none ring-2 ring-neon-500/20;
+  }
+
+  /* Icon tile — bg-neon-gradient now resolves to a flat accent fill (see
+     tailwind.config.js), so this class needs no change beyond dropping the
+     colored glow shadow and hover scale. */
+  .tile {
+    @apply flex items-center justify-center rounded-xl bg-neon-gradient text-white shadow-tile;
+  }
+
+  /* Solid accent text — was a two-color gradient clip. Flattened to match
+     the rest of the flat palette; the class name stays so nothing calling
+     it needs to change. */
+  .text-gradient {
+    @apply text-neon-400;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .border-line-strong {
+    border-color: rgb(var(--border-strong));
+  }
+
+  /* Forces the dark palette locally regardless of the app-wide theme —
+     used only by the auth branding panel, which is a fixed-dark marketing
+     surface (neon glows, always-vivid) rather than app chrome, so it
+     should not wash out to white when the user is in light mode. */
+  .theme-dark-scope {
+    color-scheme: dark;
+    --void-900: 33 33 33;
+    --void-800: 23 23 23;
+    --void-700: 43 43 43;
+    --void-600: 55 55 55;
+    --void-500: 82 82 82;
+    --border: 61 61 61;
+    --border-strong: 82 82 82;
+    --text-100: 236 236 236;
+    --text-200: 209 209 214;
+    --text-300: 163 163 163;
+    --text-400: 138 138 138;
+    --text-500: 107 107 107;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--void-500));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--text-400));
+  background-clip: padding-box;
+}
+
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

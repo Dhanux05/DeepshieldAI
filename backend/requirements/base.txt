@@ -1,0 +1,18 @@
+# API runtime only. No ML dependencies here — see ml.txt.
+# Versions below are what's actually verified working in this project's
+# dev environment (Python 3.14). See frozen-2026-08-07.txt for the full
+# transitive lockfile.
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+sqlalchemy==2.0.51
+alembic==1.19.0
+psycopg2-binary==2.9.12
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+# Pinned: passlib 1.7.4 misdetects bcrypt>=4.1 and raises a bogus
+# "password cannot be longer than 72 bytes" error on any password.
+bcrypt==4.0.1
+python-multipart==0.0.32
+email-validator==2.3.0

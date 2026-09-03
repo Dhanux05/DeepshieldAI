@@ -1,0 +1,47 @@
+# Inference dependencies — heavy, needed only for the ML endpoints.
+# The plain API (auth, CRUD, dashboard) runs on base.txt alone.
+#
+# The trained image detector is a KERAS 3 artefact (best_model.keras,
+# MobileNetV2). Keras 3 is backend-agnostic — it can execute on TensorFlow,
+# JAX, or PyTorch. This project's Python is 3.14, and `tensorflow` has no
+# published wheel for it yet (confirmed: `pip install tensorflow-cpu` fails
+# with "no matching distribution", not a slow/blocked install — there is
+# nothing to wait out). Rather than block Image on a TensorFlow release with
+# no announced date, `image_detector.py` sets KERAS_BACKEND=torch and runs
+# Keras on top of the PyTorch install that Audio/Video/Text already require.
+# No `tensorflow` install is needed at all as a result.
+
+-r base.txt
+
+# --- image detector (live, via Keras-on-PyTorch — see note above) ---
+keras>=3.13,<4
+pillow>=10.4
+numpy>=1.26,<3
+
+# --- audio, video, text detectors (all live) ---
+transformers>=4.46
+torch>=2.4
+torchvision>=0.19        # R3D-18 backbone + video preprocessing ops
+librosa>=0.10             # loads + resamples the raw audio upload to 16kHz mono
+opencv-python-headless>=4.10   # video frame extraction (cv2.VideoCapture)
+
+# --- review detector (live, reuses transformers/torch above) ---
+# --- bot detector (no model trained yet; see MODELS.md) ---
+
+# --- explainability (phase 7) ---
+# Grad-CAM (Image) needed no new dependency at all: it's implemented in
+# xai/gradcam.py with plain torch.autograd, not tf-keras-vis (that library
+# is TensorFlow-only, and this project deliberately runs Keras on the
+# PyTorch backend — see requirements note above). SHAP (Text/Review) is
+# the one real new dependency this phase adds:
+shap>=0.46
+
+# LIME — not implemented this phase (scoped out; see PROJECT_STATUS_RECHECK).
+# lime>=0.2.0.1
+# matplotlib>=3.9
+
+# --- retrieval (phase 9) ---
+# chromadb>=0.5
+# sentence-transformers>=3.1
+# pypdf>=5.0             # also the natural home for real PDF text extraction,
+#                          # which text_detector.py deliberately does not do yet
