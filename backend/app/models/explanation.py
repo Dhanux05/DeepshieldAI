@@ -14,14 +14,17 @@ class Explanation(Base):
     """
     A generated explainability artefact for one prediction.
 
-    `method` is "gradcam" or "shap" (Phase 7 scope — see xai/). `artifact_type`
+    `method` is "gradcam", "shap", or "lime" (see xai/). `artifact_type`
     tells the frontend how to render `artifact`: "image" means `artifact` is
-    a base64-encoded PNG (Grad-CAM's heatmap overlay); "tokens" means it's a
-    JSON array of {token, weight} objects (SHAP's per-token attribution).
-    One row per (prediction, method) generated — generation is on-demand via
-    POST /explanations/generate/{prediction_id}, not automatic on every
-    prediction, since both methods are too slow to run synchronously inline
-    with inference (see PROJECT_STATUS_RECHECK's note on Phase 8/async).
+    a base64-encoded PNG (Grad-CAM's heatmap overlay, or LIME's superpixel
+    boundary overlay for Image predictions); "tokens" means it's a JSON
+    array of {token, weight} objects (SHAP's per-token attribution, or
+    LIME's per-word attribution for Text/Review predictions) — same shape
+    for both methods on purpose, so the frontend renders whichever one was
+    generated identically. One row per (prediction, method) generated —
+    generation is on-demand via POST /explanations/generate/{prediction_id},
+    not automatic on every prediction, since none of the three methods are
+    fast enough to run synchronously inline with inference.
     """
 
     __tablename__ = "explanations"

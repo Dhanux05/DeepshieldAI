@@ -6,19 +6,24 @@ from app.ml.registry import registry
 from app.models.explanation import Explanation
 from app.repositories.explanation_repository import ExplanationRepository
 from app.repositories.prediction_repository import PredictionRepository
-from xai import gradcam, shap_explainer
+from xai import gradcam, lime_explainer, shap_explainer
 
 logger = get_logger(__name__)
 
 #: Which explanation methods are meaningful for which modality. Grad-CAM
-#: needs a convolutional feature map (Image only, in this phase); SHAP here
-#: is specifically the text-token explainer, so it only applies to the two
-#: DistilBERT-based modalities. Audio and Video are out of scope for Phase 7
-#: (see PROJECT_STATUS_RECHECK) — attempting either raises a clear 400
-#: rather than a confusing failure deep inside an xai module.
+#: needs a convolutional feature map (Image only); SHAP covers the two
+#: DistilBERT-based modalities via its black-box text path, AND Account via
+#: its exact TreeExplainer path for XGBoost (see xai/shap_explainer.py —
+#: `generate()` vs `generate_tabular()`). LIME is the odd one out — it's
+#: model-agnostic, so it applies to Image (superpixel perturbation,
+#: validating Grad-CAM without touching gradients) AND to Text/Review (token
+#: perturbation, a second attribution to set beside SHAP's). Audio and Video
+#: remain out of scope — attempting either raises a clear 400 rather than a
+#: confusing failure deep inside an xai module.
 SUPPORTED_METHODS: dict[str, set[str]] = {
     "gradcam": {"Image"},
-    "shap": {"Text", "Review"},
+    "shap": {"Text", "Review", "Account"},
+    "lime": {"Image", "Text", "Review"},
 }
 
 
@@ -71,14 +76,41 @@ class ExplanationService:
             )
             artifact = result["artifact"]
 
-        else:  # "shap"
-            result = shap_explainer.generate(
-                detector=detector,
-                file_path=document.file_path,
-            )
+        elif method == "shap":
+            if modality == "Account":
+                result = shap_explainer.generate_tabular(
+                    detector=detector,
+                    file_path=document.file_path,
+                )
+            else:  # "Text" or "Review"
+                result = shap_explainer.generate(
+                    detector=detector,
+                    file_path=document.file_path,
+                )
             # Stored (and shipped over the wire) as a JSON string — see
             # ExplanationResponse's docstring for why.
             artifact = json.dumps(result["artifact"])
+
+        else:  # "lime" — the one method that branches on modality itself,
+            # since it has a genuinely different xai/ entry point (and
+            # artifact_type) for Image vs. Text/Review.
+            if modality == "Image":
+                result = lime_explainer.generate_image(
+                    model=detector.underlying_model,
+                    file_path=document.file_path,
+                    input_size=detector.input_size,
+                    preprocess_mode=detector.preprocess_mode,
+                    positive_label=detector.positive_label,
+                    negative_label=detector.negative_label,
+                    threshold=detector.threshold,
+                )
+                artifact = result["artifact"]
+            else:  # "Text" or "Review"
+                result = lime_explainer.generate_text(
+                    detector=detector,
+                    file_path=document.file_path,
+                )
+                artifact = json.dumps(result["artifact"])
 
         explanation = Explanation(
             prediction_id=prediction_id,

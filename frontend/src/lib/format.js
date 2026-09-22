@@ -1,4 +1,4 @@
-import { Film, Music, FileText, Image as ImageIcon, File } from "lucide-react";
+import { Film, Music, FileText, Image as ImageIcon, File, User } from "lucide-react";
 
 export function formatBytes(bytes) {
   if (!bytes) return "0 B";
@@ -53,7 +53,24 @@ const EXT_MAP = [
   { exts: ["txt", "pdf", "doc", "docx", "csv", "json", "xml"], icon: FileText, accent: "text-caution border-caution/25 bg-caution/10", type: "Text" },
 ];
 
-export function fileMeta(name = "") {
+/**
+ * `documentType`, when given, is the server-resolved type name (from
+ * DocumentResponse.document_type_name) and always wins over an extension
+ * guess. It exists because a `.json` upload is genuinely ambiguous by
+ * extension alone — it's either a plain Text document or an Account
+ * snapshot for the bot detector (see DocumentService.upload_document) —
+ * and guessing wrong would show the wrong icon/label everywhere a document
+ * list is rendered (Upload, Predict, Explain).
+ */
+export function fileMeta(name = "", documentType) {
+  if (documentType === "Account") {
+    return {
+      icon: User,
+      accent: "text-neon-400 border-neon-500/25 bg-neon-500/10",
+      type: "Account",
+    };
+  }
+
   const ext = name.split(".").pop()?.toLowerCase();
   const match = EXT_MAP.find((entry) => entry.exts.includes(ext));
   return (

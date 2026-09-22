@@ -10,3 +10,4 @@ export { default as Gauge } from "./Gauge";
 export { default as Segmented } from "./Segmented";
 export { Label, Input, Select, Textarea } from "./Field";
 export { Skeleton, SkeletonLine, SkeletonCard } from "./Skeleton";
+export { default as Checkbox } from "./Checkbox";

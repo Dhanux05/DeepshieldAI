@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE_MB: int = 100
 
+    # ---------- Async (Phase 11) ----------
+    # Redis as Celery's broker only — no result backend is configured. See
+    # app/core/celery_app.py's module docstring for why: the `predictions`
+    # table is already the single source of truth for a task's outcome.
+    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
+
     # ---------- ML ----------
     MODEL_DIR: str = "models"
     INFERENCE_DEVICE: str = "cpu"          # "cuda" if a GPU is available
@@ -64,7 +70,7 @@ class Settings(BaseSettings):
     # preprocessor_config.json, copied locally to AUDIO_MODEL_PATH).
     #
     # No positive/negative label settings here, unlike Image: transformers
-    # persists `id2label` inside config.json at save time, so
+    # persists id2label inside config.json at save time, so
     # audio_detector.py reads the label mapping from the checkpoint itself
     # instead of hardcoding it — see audio_detector.py's docstring.
     AUDIO_MODEL_PATH: str = "models/audio"
@@ -122,6 +128,22 @@ class Settings(BaseSettings):
     # machine-generated style, not "fake review" as a general concept.
     REVIEW_MODEL_PATH: str = "models/review"
     REVIEW_MAX_LENGTH: int = 256
+
+    # Bot detector (XGBoost on account metadata; trained artefact
+    # `models/bot/bot_xgb_model.json` + `feature_schema.json`, produced by
+    # scripts/train_bot_detector.py). Unlike every other detector, input is
+    # structured JSON (account fields), not a media file — see
+    # app/ml/bot_detector.py and app/ml/bot_preprocessing.py for the full
+    # feature contract and the real held-out test metrics in
+    # models/bot/training_report.md.
+    BOT_MODEL_PATH: str = "models/bot/bot_xgb_model.json"
+    BOT_FEATURE_SCHEMA_PATH: str = "models/bot/feature_schema.json"
+
+    # None = use whatever decision_threshold scripts/train_bot_detector.py
+    # wrote into feature_schema.json (0.5 by default). Override here only to
+    # deliberately trade precision for recall (or vice-versa) without
+    # retraining.
+    BOT_DECISION_THRESHOLD: float | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

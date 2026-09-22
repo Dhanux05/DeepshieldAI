@@ -43,7 +43,7 @@ import {
 } from "../components/ui";
 import { SkeletonCard, Skeleton } from "../components/ui/Skeleton";
 import { useAuth } from "../hooks/useAuth.jsx";
-import { verdictOf, statusTone, CHART_PALETTE } from "../lib/verdict";
+import { verdictOf, statusTone, getDisplayVerdict, CHART_PALETTE } from "../lib/verdict";
 import { formatRelative, formatSeconds, exportCsv } from "../lib/format";
 
 const EMPTY_STATS = {
@@ -153,14 +153,17 @@ export default function Dashboard() {
   }, [stats]);
 
   const activity = useMemo(() => {
-    const fromPredictions = predictions.map((p) => ({
-      id: `p-${p.id}`,
-      icon: verdictOf(p.predicted_label).icon,
-      tile: verdictOf(p.predicted_label).tile,
-      title: `${p.predicted_label} — ${(p.confidence_score * 100).toFixed(1)}%`,
-      detail: `${p.model_name} · document #${p.document_id}`,
-      at: p.created_at,
-    }));
+    const fromPredictions = predictions.map((p) => {
+      const displayVerdict = getDisplayVerdict(p.predicted_label, p.confidence_score);
+      return {
+        id: `p-${p.id}`,
+        icon: verdictOf(displayVerdict).icon,
+        tile: verdictOf(displayVerdict).tile,
+        title: displayVerdict,
+        detail: `${p.model_name} · document #${p.document_id}`,
+        at: p.created_at,
+      };
+    });
 
     const fromDocuments = documents.map((d) => ({
       id: `d-${d.id}`,
@@ -602,7 +605,7 @@ export default function Dashboard() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-y border-line/8">
-                    {["Verdict", "Confidence", "Model", "Status", "When"].map(
+                    {["Verdict", "Model", "Status", "When"].map(
                       (heading) => (
                         <th
                           key={heading}
@@ -617,7 +620,11 @@ export default function Dashboard() {
                 <tbody className="divide-y divide-line">
                   {predictions.length > 0 ? (
                     predictions.slice(0, 6).map((row) => {
-                      const rowVerdict = verdictOf(row.predicted_label);
+                      const rowDisplayVerdict = getDisplayVerdict(
+                        row.predicted_label,
+                        row.confidence_score
+                      );
+                      const rowVerdict = verdictOf(rowDisplayVerdict);
                       const RowIcon = rowVerdict.icon;
                       return (
                         <tr
@@ -634,24 +641,9 @@ export default function Dashboard() {
                               <span
                                 className={`font-semibold ${rowVerdict.text}`}
                               >
-                                {row.predicted_label}
+                                {rowDisplayVerdict}
                               </span>
                             </span>
-                          </td>
-                          <td className="px-6 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-hover/8">
-                                <div
-                                  className="h-full rounded-full bg-neon-gradient"
-                                  style={{
-                                    width: `${row.confidence_score * 100}%`,
-                                  }}
-                                />
-                              </div>
-                              <span className="font-mono text-xs text-slate-400">
-                                {(row.confidence_score * 100).toFixed(0)}%
-                              </span>
-                            </div>
                           </td>
                           <td className="px-6 py-3.5 font-mono text-xs text-slate-500">
                             {row.model_name}

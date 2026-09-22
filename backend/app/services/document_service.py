@@ -22,31 +22,57 @@ class DocumentService:
         self,
         file: UploadFile,
         description: str | None,
-        current_user: User
+        current_user: User,
+        document_type_override: str | None = None,
     ) -> Document:
+        """
+        `document_type_override` exists for modalities whose input isn't
+        identifiable by file extension alone. Every media modality
+        (Image/Audio/Video/Text/Review) is inferred from the extension via
+        `FileType`, same as always. Account is the exception: it's a plain
+        `.json` upload — the same extension `.json`/`.csv` already fall
+        under `FileType`'s "Text" bucket — so the frontend's "Analyze an
+        Account" form passes `document_type="Account"` explicitly instead of
+        relying on the extension. Omitting the override preserves today's
+        behaviour exactly for every existing caller.
+        """
 
-        document_type_name = FileType.get_document_type(
-            file.filename
-        )
+        if document_type_override:
+            document_type = (
+                self.document_type_repository
+                .get_document_type_by_name(document_type_override)
+            )
 
-        folder = FileType.get_upload_folder(
-            file.filename
-        )
+            if document_type is None:
+                raise ValueError(
+                    f"Document type '{document_type_override}' not found."
+                )
+
+            folder = document_type_override.lower() + "s"
+
+        else:
+            document_type_name = FileType.get_document_type(
+                file.filename
+            )
+
+            folder = FileType.get_upload_folder(
+                file.filename
+            )
+
+            document_type = (
+                self.document_type_repository
+                .get_document_type_by_name(document_type_name)
+            )
+
+            if document_type is None:
+                raise ValueError(
+                    f"Document type '{document_type_name}' not found."
+                )
 
         unique_filename, file_path = FileStorage.save_file(
             file=file,
             folder=folder
         )
-
-        document_type = (
-            self.document_type_repository
-            .get_document_type_by_name(document_type_name)
-        )
-
-        if document_type is None:
-            raise ValueError(
-                f"Document type '{document_type_name}' not found."
-            )
 
         document = Document(
             file_name=unique_filename,

@@ -30,6 +30,17 @@ router = APIRouter()
 def upload_document(
     file: UploadFile = File(...),
     description: Annotated[str | None, Form()] = None,
+    document_type: Annotated[
+        str | None,
+        Form(
+            description=(
+                "Optional explicit document type (e.g. 'Account'). Only "
+                "needed for modalities that can't be inferred from the "
+                "file extension — see DocumentService.upload_document. "
+                "Omit for Image/Audio/Video/Text/Review uploads."
+            )
+        ),
+    ] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -40,6 +51,7 @@ def upload_document(
             file=file,
             description=description,
             current_user=current_user,
+            document_type_override=document_type,
         )
 
     except ValueError as e:

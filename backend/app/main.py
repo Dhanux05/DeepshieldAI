@@ -13,6 +13,7 @@ from app.api.routes.document_type import router as document_type_router
 from app.api.routes.explanation import router as explanation_router
 from app.api.routes.knowledge_base import router as knowledge_base_router
 from app.api.routes.prediction import router as prediction_router
+from app.api.routes.rag import router as rag_router
 from app.api.routes.report import router as report_router
 from app.api.routes.review_analysis import router as review_analysis_router
 from app.constants.roles import Roles
@@ -22,6 +23,7 @@ from app.dependencies.auth import get_current_active_user
 from app.dependencies.rbac import require_roles
 from app.ml.registry import registry
 from app.utils.file_storage import FileStorage
+from rag.ingest import sync_knowledge_base
 
 logger = get_logger(__name__)
 
@@ -42,6 +44,23 @@ async def lifespan(app: FastAPI):
     # recorded rather than raised — a missing model must not stop the API
     # from booting, and /api/predictions/models reports the reason.
     registry.load_all()
+
+    # The knowledge base (backend/knowledge-sources/*.md) is embedded into
+    # ChromaDB here so the /api/rag/query endpoint is ready the moment the
+    # API starts serving requests. Like the model registry above, a failure
+    # here is logged rather than raised — the RAG assistant is a support
+    # feature, not core detection, and a bad sync must not stop deepfake
+    # detection from booting.
+    try:
+        summary = sync_knowledge_base()
+        logger.info(
+            "RAG knowledge base synced (synced=%d, skipped=%d, removed=%d)",
+            len(summary["synced"]),
+            len(summary["skipped"]),
+            len(summary["removed_stale"]),
+        )
+    except Exception:
+        logger.exception("RAG knowledge base sync failed at startup")
 
     logger.info(
         "%s v%s starting (debug=%s)",
@@ -148,6 +167,12 @@ app.include_router(
     knowledge_base_router,
     prefix=f"{settings.API_PREFIX}/knowledge-base",
     tags=["Knowledge Base"],
+    dependencies=protected,
+)
+app.include_router(
+    rag_router,
+    prefix=f"{settings.API_PREFIX}/rag",
+    tags=["RAG Knowledge Base"],
     dependencies=protected,
 )
 

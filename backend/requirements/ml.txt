@@ -26,14 +26,20 @@ librosa>=0.10             # loads + resamples the raw audio upload to 16kHz mono
 opencv-python-headless>=4.10   # video frame extraction (cv2.VideoCapture)
 
 # --- review detector (live, reuses transformers/torch above) ---
-# --- bot detector (no model trained yet; see MODELS.md) ---
+
+# --- bot detector (Phase 10, live — XGBoost on account metadata) ---
+xgboost>=2.1              # trained + served via scripts/train_bot_detector.py / app/ml/bot_detector.py
+pandas>=2.2                # training-time only (CSV loading, feature-matrix assembly)
+scikit-learn>=1.5          # training-time only (train/val/test split, evaluation metrics)
+python-dateutil>=2.9       # robust created_at parsing across the dataset's two date formats
+vaderSentiment>=3.3.2      # lightweight bio-sentiment score — see bot_preprocessing.py docstring
 
 # --- explainability ---
 # Grad-CAM (Image) needed no new dependency at all: it's implemented in
 # xai/gradcam.py with plain torch.autograd, not tf-keras-vis (that library
 # is TensorFlow-only, and this project deliberately runs Keras on the
-# PyTorch backend — see requirements note above). SHAP (Text/Review) is
-# the primary external explainer dependencies are:
+# PyTorch backend — see requirements note above). SHAP (Text/Review/Account)
+# is the primary external explainer dependencies are:
 shap>=0.46
 lime>=0.2.0.1
 

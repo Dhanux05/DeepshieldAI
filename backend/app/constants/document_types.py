@@ -4,3 +4,4 @@ class DocumentTypes:
     AUDIO = "Audio"
     TEXT = "Text"
     REVIEW = "Review"
+    ACCOUNT = "Account"

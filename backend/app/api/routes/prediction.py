@@ -59,20 +59,31 @@ def get_model_status():
     return registry.status()
 
 
-@router.post("/analyze/{document_id}", response_model=PredictionResponse)
+@router.post(
+    "/analyze/{document_id}",
+    response_model=PredictionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 def analyze_document(
     document_id: int,
     service: PredictionService = Depends(get_prediction_service),
 ):
     """
-    Run the detection model against an uploaded document.
+    Queue the detection model against an uploaded document.
+
+    Phase 11: this returns immediately (202) with a "Processing" prediction
+    — the actual model run happens in a Celery worker, not on this request.
+    Poll GET /predictions/{id} (the frontend does this every ~1.5s) until
+    `processing_status` is no longer "Processing".
 
     503 (not 501) when the relevant model is missing: the service itself is
     healthy, this one capability is not, and the client may reasonably retry
-    after the operator installs the weights.
+    after the operator installs the weights. This check still happens
+    synchronously, before anything is queued — an unsupported modality fails
+    the request immediately rather than as a Celery task nobody is watching.
     """
     try:
-        return service.analyze_document(document_id)
+        return service.start_analysis(document_id)
 
     except ModelUnavailableError as exc:
         raise HTTPException(

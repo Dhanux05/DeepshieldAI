@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.ml.audio_detector import AudioDetector
 from app.ml.base import BaseDetector, ModelUnavailableError
+from app.ml.bot_detector import BotDetector
 from app.ml.image_detector import ImageDetector
 from app.ml.review_detector import ReviewDetector
 from app.ml.text_detector import TextDetector
@@ -83,12 +84,20 @@ class ModelRegistry:
         )
         review.load()
 
+        bot = BotDetector(
+            model_path=settings.BOT_MODEL_PATH,
+            feature_schema_path=settings.BOT_FEATURE_SCHEMA_PATH,
+            decision_threshold=settings.BOT_DECISION_THRESHOLD,
+        )
+        bot.load()
+
         self._detectors = {
             "Image": image,
             "Audio": audio,
             "Video": video,
             "Text": text,
             "Review": review,
+            "Account": bot,
         }
         self._loaded = True
 

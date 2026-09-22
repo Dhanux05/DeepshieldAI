@@ -9,6 +9,7 @@ import {
   ServerCog,
   RefreshCw,
   FileStack,
+  LoaderCircle,
 } from "lucide-react";
 import apiClient, { apiError } from "../api/client";
 import {
@@ -18,12 +19,39 @@ import {
   PageHeader,
   EmptyState,
   Alert,
-  ConfidenceMeter,
   Input,
 } from "../components/ui";
 import { Skeleton } from "../components/ui/Skeleton";
-import { verdictOf, statusTone } from "../lib/verdict";
+import { verdictOf, statusTone, getDisplayVerdict } from "../lib/verdict";
 import { formatBytes, formatRelative, formatSeconds, fileMeta } from "../lib/format";
+
+// Phase 11: POST /predictions/analyze/{id} now returns immediately with a
+// "Processing" row instead of waiting for the model — the real inference
+// runs in a Celery worker (see backend/app/core/celery_app.py). There's no
+// websocket or task-result channel to subscribe to on purpose (the
+// predictions table is the one source of truth — see that file's
+// docstring), so the frontend polls the plain GET /predictions/{id}
+// endpoint it already had.
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 120_000; // 2 minutes — generous even for Video on CPU
+
+async function pollUntilSettled(predictionId) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    const { data } = await apiClient.get(`/predictions/${predictionId}`);
+    if (data.processing_status !== "Processing") {
+      return data;
+    }
+  }
+
+  const timeoutError = new Error(
+    "Analysis is taking longer than expected. It may still finish — check History shortly."
+  );
+  timeoutError.isPollTimeout = true;
+  throw timeoutError;
+}
 
 export default function Predict() {
   const [documents, setDocuments] = useState([]);
@@ -118,7 +146,13 @@ export default function Predict() {
 
     try {
       const response = await apiClient.post(`/predictions/analyze/${selectedId}`);
+      // Shows the "Processing" state immediately — the badge and verdict
+      // panel below already render it distinctly (see `isProcessing`).
       setResult(response.data);
+
+      const finalResult = await pollUntilSettled(response.data.id);
+      setResult(finalResult);
+
       const refreshed = await apiClient.get(
         `/predictions/document/${selectedId}`
       );
@@ -126,6 +160,8 @@ export default function Predict() {
     } catch (err) {
       if (err.response?.status === 503) {
         setEngineOffline(apiError(err));
+      } else if (err.isPollTimeout) {
+        setError(err.message);
       } else {
         setError(apiError(err, "Analysis request failed."));
       }
@@ -135,7 +171,16 @@ export default function Predict() {
   };
 
   const latest = result ?? history[0] ?? null;
-  const verdict = verdictOf(latest?.predicted_label);
+  // A queued-but-not-yet-run prediction (Phase 11) has no real verdict yet —
+  // predicted_label is the literal placeholder "Pending" with confidence 0,
+  // which getDisplayVerdict would otherwise render as a misleading
+  // "Uncertain". Show it as what it actually is: still running.
+  const isProcessing = latest?.processing_status === "Processing";
+  const latestDisplayVerdict =
+    latest && !isProcessing
+      ? getDisplayVerdict(latest.predicted_label, latest.confidence_score)
+      : null;
+  const verdict = verdictOf(latestDisplayVerdict);
   const VerdictIcon = verdict.icon;
 
   return (
@@ -193,7 +238,10 @@ export default function Predict() {
                 </div>
               ) : filtered.length > 0 ? (
                 filtered.map((document) => {
-                  const meta = fileMeta(document.original_file_name);
+                  const meta = fileMeta(
+                    document.original_file_name,
+                    document.document_type_name
+                  );
                   const Icon = meta.icon;
                   const active = document.id === selectedId;
 
@@ -265,7 +313,8 @@ export default function Predict() {
                   </p>
                   {selected && (
                     <p className="mt-1 font-mono text-xs text-slate-500">
-                      {fileMeta(selected.original_file_name).type} ·{" "}
+                      {fileMeta(selected.original_file_name, selected.document_type_name).type}{" "}
+                      ·{" "}
                       {formatBytes(selected.file_size)} · uploaded{" "}
                       {formatRelative(selected.uploaded_at)}
                     </p>
@@ -304,31 +353,52 @@ export default function Predict() {
                     </Badge>
                   </div>
 
-                  <div className="mt-4 flex items-center gap-4">
-                    <div
-                      className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${verdict.ring}`}
-                    >
-                      <VerdictIcon className="h-7 w-7" strokeWidth={2} />
+                  {isProcessing ? (
+                    <div className="mt-4 flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-neon-500/25 bg-neon-500/10 text-neon-400">
+                        <LoaderCircle className="h-7 w-7 animate-spin" strokeWidth={2} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-display text-2xl font-bold text-slate-200">
+                          Queued for analysis…
+                        </p>
+                        <p className="truncate font-mono text-xs text-slate-500">
+                          {latest.model_name} · a Celery worker is running
+                          this detector now
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p
-                        className={`font-display text-2xl font-bold ${verdict.text} text-glow`}
-                      >
-                        {latest.predicted_label}
-                      </p>
-                      <p className="truncate font-mono text-xs text-slate-500">
-                        {latest.model_name} ·{" "}
-                        {formatSeconds(latest.processing_time)}
-                      </p>
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="mt-4 flex items-center gap-4">
+                        <div
+                          className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${verdict.ring}`}
+                        >
+                          <VerdictIcon className="h-7 w-7" strokeWidth={2} />
+                        </div>
+                        <div className="min-w-0">
+                          <p
+                            className={`font-display text-2xl font-bold ${verdict.text} text-glow`}
+                          >
+                            {latestDisplayVerdict}
+                          </p>
+                          <p className="truncate font-mono text-xs text-slate-500">
+                            {latest.model_name} ·{" "}
+                            {formatSeconds(latest.processing_time)}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="mt-5">
-                    <ConfidenceMeter
-                      value={latest.confidence_score}
-                      tone={verdict.tone}
-                    />
-                  </div>
+                      {(latestDisplayVerdict === "Suspicious" ||
+                        latestDisplayVerdict === "Uncertain") && (
+                        <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                          The model wasn't confident enough for a clear-cut
+                          call — treat this one as needing a closer, manual
+                          look rather than a verdict on its own.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 !engineOffline && (
@@ -419,7 +489,11 @@ export default function Predict() {
                   </div>
                 ) : history.length > 0 ? (
                   history.map((run) => {
-                    const runVerdict = verdictOf(run.predicted_label);
+                    const runDisplayVerdict = getDisplayVerdict(
+                      run.predicted_label,
+                      run.confidence_score
+                    );
+                    const runVerdict = verdictOf(runDisplayVerdict);
                     return (
                       <div
                         key={run.id}
@@ -432,10 +506,7 @@ export default function Predict() {
                         <span
                           className={`w-24 shrink-0 text-sm font-semibold ${runVerdict.text}`}
                         >
-                          {run.predicted_label}
-                        </span>
-                        <span className="font-mono text-xs text-slate-400">
-                          {(run.confidence_score * 100).toFixed(1)}%
+                          {runDisplayVerdict}
                         </span>
                         <span className="hidden min-w-0 flex-1 truncate font-mono text-xs text-slate-600 sm:block">
                           {run.model_name}

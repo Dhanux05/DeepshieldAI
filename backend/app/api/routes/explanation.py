@@ -31,7 +31,10 @@ def generate_explanation(
     prediction_id: int,
     method: str = Query(
         ...,
-        description="'gradcam' (Image predictions) or 'shap' (Text/Review predictions).",
+        description=(
+            "'gradcam' (Image only), 'shap' (Text/Review only), "
+            "or 'lime' (Image, Text, or Review)."
+        ),
     ),
     service: ExplanationService = Depends(get_explanation_service),
 ):

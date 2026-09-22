@@ -22,6 +22,7 @@ class FileStorage:
             "videos",
             "audio",
             "text",
+            "accounts",
             "reports",
             "xai",
         ]

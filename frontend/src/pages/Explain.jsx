@@ -20,20 +20,19 @@ import {
   PageHeader,
   EmptyState,
   Alert,
-  ConfidenceMeter,
   Select,
   Label,
 } from "../components/ui";
 import { Skeleton } from "../components/ui/Skeleton";
-import { verdictOf, statusTone } from "../lib/verdict";
+import { verdictOf, statusTone, getDisplayVerdict } from "../lib/verdict";
 import { formatDateTime, formatSeconds } from "../lib/format";
 
 /**
- * The three attribution methods the project promises.
- *
- * Rendered as honest placeholders until phase 7 fills xai/gradcam.py,
- * xai/shap_explainer.py and xai/lime_explainer.py — all three are currently
- * empty files. Showing a fake heatmap here would be worse than showing none.
+ * The three attribution methods the project promises — all three now live
+ * (xai/gradcam.py, xai/shap_explainer.py, xai/lime_explainer.py generate
+ * real artefacts on demand). LIME is model-agnostic, so unlike the other
+ * two it applies across both Image and Text/Review — its badge reflects
+ * that instead of a single modality.
  */
 const METHODS = [
   {
@@ -51,12 +50,12 @@ const METHODS = [
     key: "shap",
     name: "SHAP",
     icon: BarChart3,
-    question: "How much did each token contribute?",
+    question: "How much did each token or feature contribute?",
     detail:
-      "Shapley values give an additive, theoretically grounded attribution per token, against a masked-token background.",
+      "Shapley values give an additive, theoretically grounded attribution per token (Text/Review) or engineered feature (Account), against a masked/background baseline.",
     accent: "border-volt-500/25 bg-volt-500/10 text-volt-400",
     available: true,
-    modality: "Text / Review",
+    modality: "Text / Review / Account",
   },
   {
     key: "lime",
@@ -64,10 +63,10 @@ const METHODS = [
     icon: Boxes,
     question: "What simple model mimics this decision locally?",
     detail:
-      "Perturbs superpixels or tokens and fits an interpretable surrogate around this single prediction.",
+      "Perturbs image superpixels or text tokens and fits an interpretable linear surrogate around this single prediction — model-agnostic, so it works the same way whether or not the underlying model exposes gradients.",
     accent: "border-neon-500/25 bg-neon-500/10 text-neon-400",
-    available: false,
-    modality: null,
+    available: true,
+    modality: "Image / Text / Review",
   },
 ];
 
@@ -169,7 +168,10 @@ export default function Explain() {
   const selected = predictions.find(
     (item) => String(item.id) === String(selectedId)
   );
-  const verdict = verdictOf(selected?.predicted_label);
+  const selectedDisplayVerdict = selected
+    ? getDisplayVerdict(selected.predicted_label, selected.confidence_score)
+    : null;
+  const verdict = verdictOf(selectedDisplayVerdict);
   const VerdictIcon = verdict.icon;
 
   return (
@@ -229,9 +231,9 @@ export default function Explain() {
                   >
                     {predictions.map((item) => (
                       <option key={item.id} value={item.id}>
-                        #{item.id} · {item.predicted_label} ·{" "}
-                        {(item.confidence_score * 100).toFixed(1)}% ·{" "}
-                        {item.model_name}
+                        #{item.id} ·{" "}
+                        {getDisplayVerdict(item.predicted_label, item.confidence_score)}{" "}
+                        · {item.model_name}
                       </option>
                     ))}
                   </Select>
@@ -269,15 +271,17 @@ export default function Explain() {
                       <p
                         className={`font-display text-2xl font-bold ${verdict.text} text-glow`}
                       >
-                        {selected.predicted_label}
+                        {selectedDisplayVerdict}
                       </p>
                     </div>
-                    <div className="mt-5">
-                      <ConfidenceMeter
-                        value={selected.confidence_score}
-                        tone={verdict.tone}
-                      />
-                    </div>
+                    {(selectedDisplayVerdict === "Suspicious" ||
+                      selectedDisplayVerdict === "Uncertain") && (
+                      <p className="mt-4 text-xs leading-relaxed text-slate-500">
+                        The model wasn't confident enough for a clear-cut call
+                        — treat this one as needing a closer, manual look
+                        rather than a verdict on its own.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -357,17 +361,6 @@ export default function Explain() {
                 );
               })}
             </div>
-
-            <Alert variant="pending" title="LIME not implemented yet">
-              Grad-CAM (Image) and SHAP (Text/Review) are live —{" "}
-              <code className="font-mono text-xs">xai/gradcam.py</code> and{" "}
-              <code className="font-mono text-xs">xai/shap_explainer.py</code>{" "}
-              generate real artefacts on demand, stored in the{" "}
-              <code className="font-mono text-xs">explanations</code> table.{" "}
-              <code className="font-mono text-xs">xai/lime_explainer.py</code>{" "}
-              is still empty — a deliberately scoped-out follow-up, not an
-              oversight (see PROJECT_STATUS_RECHECK).
-            </Alert>
 
             {/* Evidence that DOES exist today */}
             <div className="grid gap-5 lg:grid-cols-3">

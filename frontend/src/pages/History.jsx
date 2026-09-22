@@ -24,7 +24,7 @@ import {
   Input,
 } from "../components/ui";
 import { Skeleton } from "../components/ui/Skeleton";
-import { verdictOf, statusTone } from "../lib/verdict";
+import { verdictOf, statusTone, getDisplayVerdict } from "../lib/verdict";
 import {
   formatDateTime,
   formatBytes,
@@ -278,7 +278,6 @@ export default function History() {
                         <>
                           <Th>ID</Th>
                           <Th>Verdict</Th>
-                          <Th>Confidence</Th>
                           <Th>Source file</Th>
                           <Th>Model</Th>
                           <Th>Status</Th>
@@ -314,7 +313,11 @@ export default function History() {
                   <tbody className="divide-y divide-line">
                     {pageRows.map((row) => {
                       if (tab === "predictions") {
-                        const verdict = verdictOf(row.predicted_label);
+                        const displayVerdict = getDisplayVerdict(
+                          row.predicted_label,
+                          row.confidence_score
+                        );
+                        const verdict = verdictOf(displayVerdict);
                         return (
                           <tr key={row.id} className="transition hover:bg-hover/[0.03]">
                             <Td className="font-mono text-slate-500">#{row.id}</Td>
@@ -326,11 +329,8 @@ export default function History() {
                                   className="h-2 w-2 rounded-full"
                                   style={{ backgroundColor: verdict.chart }}
                                 />
-                                {row.predicted_label}
+                                {displayVerdict}
                               </span>
-                            </Td>
-                            <Td className="font-mono text-slate-300">
-                              {(row.confidence_score * 100).toFixed(1)}%
                             </Td>
                             <Td className="max-w-[16rem] truncate text-slate-400">
                               {documentNames.get(row.document_id) ??

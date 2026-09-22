@@ -67,5 +67,19 @@ class Document(Base):
         cascade="all, delete-orphan",
     )
 
+    @property
+    def document_type_name(self) -> str:
+        """
+        The document type's name (e.g. "Image", "Account"), for
+        DocumentResponse. Exists because a `.json` upload is ambiguous by
+        extension alone — it could be a plain Text document or an Account
+        snapshot (see DocumentService.upload_document) — so the frontend
+        needs the resolved type, not just the extension, to render the
+        right icon/label. A plain property works fine with Pydantic's
+        `from_attributes=True`: it's just another attribute to read off the
+        ORM instance.
+        """
+        return self.document_type.type_name
+
     def __repr__(self) -> str:
         return f"<Document(id={self.id}, name='{self.original_file_name}')>"

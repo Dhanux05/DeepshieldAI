@@ -1,0 +1,132 @@
+# One-command way to run the whole DeepShieldAI stack — Postgres, Redis,
+# the FastAPI API, the Celery worker (Phase 11's async pipeline), and the
+# built React frontend behind nginx. See docs/DOCKER.md for the full
+# design rationale; this file is deliberately kept close to self-explaining
+# via the comments below rather than duplicating that whole doc here.
+#
+# Prerequisites (see docs/DOCKER.md for the full list):
+#   1. Docker Desktop (or Docker Engine + Compose v2) installed.
+#   2. backend/.env exists — copy backend/.env.example to backend/.env and
+#      set a real SECRET_KEY if you haven't already for local development.
+#   3. Trained model weights are present under backend/models/ (see
+#      README.md's "Model weights" section) — the API still starts without
+#      them, but every detector will report itself unavailable.
+#
+# Run it:
+#   docker compose up --build
+#
+# Then open http://localhost:5173.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Matches backend/.env.example's DATABASE_URL exactly (postgres /
+      # postgres / deepshieldai) — a deliberate, documented local/demo
+      # default, not a value guarded as a secret anywhere in this project.
+      POSTGRES_DB: deepshieldai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      # Named volume, not a bind mount: nobody needs to browse Postgres's
+      # raw data files on the host, and a named volume survives
+      # `docker compose down` (though not `down -v`) without cluttering the
+      # repo checkout the way a bind-mounted ./pgdata folder would.
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    # SECRET_KEY, DEBUG, CORS_ORIGINS etc. come from the developer's own
+    # backend/.env (see prerequisites above) — reused as-is rather than
+    # duplicated here, so there's exactly one place those values live.
+    env_file:
+      - ./backend/.env
+    environment:
+      # These two deliberately override whatever backend/.env has (Compose
+      # applies `environment:` after `env_file:`), because a bare-metal
+      # .env correctly points at "localhost" — which, from inside this
+      # container, means the container itself, not the postgres/redis
+      # containers next to it. Docker's embedded DNS resolves the service
+      # names below to the right container automatically.
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/deepshieldai
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      # Model weights are read-only from the API/worker's point of view —
+      # nothing in this codebase writes to backend/models/ at runtime.
+      - ./backend/models:/app/models:ro
+      - ./backend/knowledge-sources:/app/knowledge-sources:ro
+      # Uploaded documents and the Chroma vector store DO need to be
+      # writable, and — unlike models/ — must persist independently of the
+      # image (a rebuild must never delete a user's uploaded files).
+      - ./backend/uploads:/app/uploads
+      - ./backend/storage:/app/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker:
+    # Same image as `backend` — see backend/Dockerfile's top comment on why
+    # sharing one image matters here. Only the command differs.
+    build:
+      context: ./backend
+    command: >
+      celery -A app.core.celery_app worker --loglevel=info
+    # No --pool=solo here: that flag exists only because Windows lacks
+    # os.fork() (see celery_app.py's module docstring and
+    # docs/ASYNC_PIPELINE.md). Linux containers support fork natively, so
+    # the worker gets Celery's real "prefork" pool here — actual
+    # concurrency, not the one-task-at-a-time fallback the bare-metal
+    # Windows instructions call for.
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/deepshieldai
+      CELERY_BROKER_URL: redis://redis:6379/0
+    volumes:
+      - ./backend/models:/app/models:ro
+      - ./backend/knowledge-sources:/app/knowledge-sources:ro
+      - ./backend/uploads:/app/uploads
+      - ./backend/storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      # Host port 5173 to match every port number this project's own
+      # README and docs already reference for the frontend — even though
+      # nginx listens on 80 *inside* the container, nobody outside this
+      # file needs to know or care about that.
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -6,6 +6,12 @@ Source of truth: `MyDrive/DeepShieldAI/` (owner: vinuthabr2020@gmail.com)
 Every fact below is read from notebook source or captured cell output — not
 inferred from the artefacts.
 
+**Addendum, 13 Sep 2026:** a sixth modality (Bot/Account) was added — see
+§6, trained locally via `scripts/train_bot_detector.py`, not a Colab
+notebook. The Image section below also gained an independent re-check
+(§1, "Independent re-check, 13 Sep 2026") after a user report of real
+photos being misclassified as Deepfake.
+
 ---
 
 ## Where the good copies live
@@ -69,6 +75,45 @@ IMAGE_NEGATIVE_LABEL=Genuine
 
 `scripts/calibrate_image_model.py` is no longer needed to *find* these, but
 it's still worth one run as an independent confirmation.
+
+### Independent re-check, 13 Sep 2026 — config confirmed correct, accuracy is the real limit
+
+A user reported two genuine WhatsApp photos both being classified as
+"Deepfake" with moderate-to-high confidence. Before assuming the model was
+misconfigured (again), all 3 preprocessing modes × 2 polarities were
+re-tested against `best_model.keras` and 40 real + 40 fake labelled images
+(a different, larger sample than the notebook's own n=100 test set):
+
+| Mode | Mean sigmoid (real) | Mean sigmoid (fake) | Best accuracy |
+|---|---|---|---|
+| `mobilenet_v2` | 0.71 | 0.84 | 53.8% (high=Deepfake) |
+| **`rescale`** | **0.40** | **0.73** | **75.0% (high=Deepfake)** |
+| `raw` | 0.74 | 0.73 | 50.0% (coin flip) |
+
+`rescale` + high-sigmoid=Deepfake — i.e. the settings already deployed —
+won outright. `raw` landing at exactly 50/50 is useful negative evidence:
+it shows the model has *no* separating signal without the `/255.0` scaling,
+which confirms `rescale` is genuinely doing something, not just the
+least-bad guess. **Conclusion: the config is not the bug.**
+
+The real constraint is that ~75% accuracy (consistent with the notebook's
+own 0.782 F1 on a different, smaller test set) means roughly 1 in 4 images
+is wrong, and the sigmoid isn't calibrated — genuine photos scored as low
+as 0.10 and as high as 0.59 in this sample, so some real photos land just
+over the 0.5 decision line and get called "Deepfake" with a confidence
+(0.53–0.59) that clears the display layer's "confident" threshold (see
+`frontend/src/lib/verdict.js`). That is a real, wrong prediction, not a
+display/threshold artefact — no UI-side fix can correct it.
+
+**This is a known, documented limitation, not something patched over.**
+The two options that would actually fix it — fine-tuning on a larger,
+higher-resolution real-world photo dataset, or proper confidence
+calibration (temperature scaling against a held-out set) — are both
+real additional-scope work, deliberately not undertaken here so this
+project's remaining phases (async pipeline, Docker, tests) could ship on
+time. State this plainly if asked in a viva: the Image detector is the
+project's second-weakest modality after Video, for a different reason
+(genuine but limited accuracy, vs. Video's complete failure to learn).
 
 > Note: training resized with `tf.image.resize` (bilinear) and applied no EXIF
 > transpose. Our `preprocessing.py` uses bilinear (matches) and *does* apply
@@ -194,14 +239,49 @@ route video through the image detector frame-by-frame.
 
 ---
 
+## 6. Bot / Account — LIVE ✅
+
+| | |
+|---|---|
+| Trained by | `scripts/train_bot_detector.py` (local, not a Colab notebook) |
+| Architecture | XGBoost binary classifier, 20 hand-engineered features (see `app/ml/bot_preprocessing.py`) |
+| Data | `training_data_2_csv_UTF.csv` (Twitter human/bot accounts, public mirror of the "cresci-2017"-style dataset) — 2 797 rows, 365 duplicate accounts dropped → 2 432 rows, stratified 70/15/15 split |
+| Training | Early-stopped XGBoost, `random_state=42` |
+
+**Test results: Accuracy 0.9370 · F1 0.9256 · ROC-AUC 0.9845**
+Confusion matrix `[[TN 199, FP 9], [FN 14, TP 143]]`.
+
+The second-strongest model in the project after Audio. Two disclosed,
+deliberate limitations (both documented in `bot_preprocessing.py`'s module
+docstring, not hidden):
+
+1. **"Sentiment" is bio sentiment, not tweet sentiment** — the source
+   dataset's `status` field (one raw tweet dump per account) isn't reliably
+   parseable, so `description_sentiment` scores the profile bio via VADER
+   instead. A bot with a bland bio and wildly erratic tweets would not be
+   caught by this feature.
+2. **Trained entirely on Twitter/X-shaped accounts** (screen names,
+   follower/friend ratios, tweet cadence). The feature set doesn't
+   generalise to a platform with structurally different signals (e.g. no
+   "friends" concept) without re-deriving the features for that platform.
+
+Ingestion goes through the same generic `Document → Prediction` pipeline as
+every other modality: the frontend's "Analyze an account" form (Upload
+page) posts a JSON snapshot with `document_type=Account`, `Predict` runs it
+unchanged, and `Explain` generates a SHAP feature-attribution breakdown via
+`xai/shap_explainer.py`'s `generate_tabular()`.
+
+---
+
 ## Summary
 
 | Modality | Test F1 | Test set size | Status |
 |---|---|---|---|
 | Audio | **0.980** | 150 | Best model. Wire it. |
+| Bot/Account | **0.926** | 365 | Second-best. Live, with disclosed limitations above. |
 | Review | **0.973** | 6 063 | Best evidence. Note the OOD caveat. |
 | Text | 0.982 | 335 | Wire it, but fix the 40% data loss first. |
-| Image | 0.782 | 100 | Live in the app now. |
+| Image | 0.782 (n=100) / 75% acc. (n=80, re-check) | 100 | Live, but ~1-in-4 wrong — see §1 re-check. |
 | Video | 0.385 | 11 | Broken — predicts one class. |
 
 **Framework mix:** Keras 3 (image) + PyTorch/Transformers (audio, text, review)

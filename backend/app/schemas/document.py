@@ -25,6 +25,11 @@ class DocumentResponse(BaseModel):
     uploaded_at: datetime
     uploaded_by: int
     document_type_id: int
+    # Resolved type name (e.g. "Account"), not just the FK id — a `.json`
+    # upload is otherwise indistinguishable from a plain Text document on
+    # the frontend. Backed by Document.document_type_name, a plain Python
+    # property; from_attributes reads it like any other attribute.
+    document_type_name: str
 
     class Config:
         from_attributes = True

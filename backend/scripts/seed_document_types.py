@@ -27,6 +27,10 @@ def seed_document_types(db: Session):
         {
             "type_name": DocumentTypes.REVIEW,
             "description": "Product or service reviews"
+        },
+        {
+            "type_name": DocumentTypes.ACCOUNT,
+            "description": "Social-media account metadata (bot detection)"
         }
     ]
 
