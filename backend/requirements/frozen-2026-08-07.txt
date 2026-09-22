@@ -1,3 +1,17 @@
+# Frozen from `pip freeze` against the base.txt + dev.txt environment
+# (API + dev/test tooling — not the ml.txt/RAG stack, which has its own
+# much larger set of pins and isn't captured here).
+#
+# celery==5.6.3 and redis==8.1.0 were added by hand on 2026-09-22 to match
+# what Phase 11 (the async Celery/Redis pipeline) added to base.txt.
+# Their own transitive dependencies (kombu, billiard, vine, amqp,
+# click-repl, click-didyoumean) are NOT included here, since faking exact
+# pinned versions for packages this environment hasn't actually resolved
+# would be worse than leaving them out. Regenerate this file properly
+# with `pip freeze > requirements/frozen-$(date +%F).txt` (from an
+# activated venv with base.txt + dev.txt installed) the next time it
+# needs to be exact.
+
 alembic==1.19.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -5,6 +19,7 @@ anyio==4.14.2
 ast_serialize==0.7.0
 bcrypt==4.0.1
 black==26.5.1
+celery==5.6.3
 certifi==2026.7.22
 click==8.4.2
 colorama==0.4.6
@@ -46,6 +61,7 @@ python-jose==3.5.0
 python-multipart==0.0.32
 pytokens==0.4.1
 PyYAML==6.0.3
+redis==8.1.0
 rsa==4.9.1
 ruff==0.16.1
 six==1.17.0

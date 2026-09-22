@@ -1,0 +1,9 @@
+# Enforce LF line endings for all text files, regardless of the OS or
+# editor that checked them out or saved them. Without this, a file edited
+# on Windows with an editor that defaults to CRLF shows as "every line
+# changed" in `git diff` / `git status` compared to the LF blobs already in
+# this repo's history, even when nothing about the file's actual content
+# changed — exactly what was happening here before this file was added.
+# `text=auto` still lets git treat genuinely binary files (images, model
+# weights, .pyc, etc.) as binary rather than trying to normalize them.
+* text=auto eol=lf
